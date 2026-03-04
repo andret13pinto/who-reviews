@@ -5,12 +5,23 @@ inputs:
     description: "Path to squads config file"
     required: false
     default: ".github/squads.yml"
-  github-token:
-    description: "GitHub token for API access"
-    required: true
 runs:
-  using: "docker"
-  image: "Dockerfile"
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - uses: actions/cache@v4
+      with:
+        path: .pr-review-state.json
+        key: who-reviews-state-${{ github.repository }}
+    - run: pip install ${{ github.action_path }}
+      shell: bash
+    - run: python -m pr_review_action.main
+      shell: bash
+      env:
+        INPUT_GITHUB-TOKEN: ${{ github.token }}
+        INPUT_CONFIG-PATH: ${{ inputs.config-path }}
 branding:
   icon: "users"
   color: "blue"

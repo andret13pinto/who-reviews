@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 
-from pr_review_action.strategies.base import SelectionContext
+from pr_review_action.strategies.base import ReviewState, SelectionContext
 
 
 class LeastRecentStrategy:
@@ -22,12 +22,11 @@ class LeastRecentStrategy:
     def _load_timestamps(self) -> dict[str, float]:
         if not self._state_path.exists():
             return {}
-        data: dict[str, object] = json.loads(self._state_path.read_text())
-        timestamps: dict[str, float] = data.get("last_assigned", {})  # type: ignore[assignment]
-        return timestamps
+        data: ReviewState = json.loads(self._state_path.read_text())
+        return data.get("last_assigned", {})
 
     def _save_timestamps(self, timestamps: dict[str, float]) -> None:
-        data: dict[str, object] = {}
+        data: ReviewState = {}
         if self._state_path.exists():
             data = json.loads(self._state_path.read_text())
         data["last_assigned"] = timestamps

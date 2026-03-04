@@ -23,6 +23,8 @@ The PR author is always excluded from candidates.
 
 ### 1. Create `.github/squads.yml`
 
+By default, the action looks for the config file at `.github/squads.yml` — no need to specify `config-path` in your workflow unless you want a different location.
+
 ```yaml
 strategy: random  # random | round-robin | least-recent
 
@@ -63,8 +65,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: your-org/who-reviews@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Configuration
@@ -73,7 +73,6 @@ jobs:
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `github-token` | GitHub token for API access | *required* |
 | `config-path` | Path to squads config file | `.github/squads.yml` |
 
 ### Selection Strategies
@@ -82,7 +81,7 @@ jobs:
 - **`round-robin`** — tracks assignment counts, picks the least-assigned person
 - **`least-recent`** — tracks timestamps, picks whoever was assigned longest ago
 
-Round-robin and least-recent persist state in `.pr-review-state.json` in the repo root.
+Round-robin and least-recent persist state in `.pr-review-state.json`. This file is automatically cached between runs — no manual setup needed.
 
 ### Validation
 
