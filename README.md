@@ -68,7 +68,7 @@ jobs:
     if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@v4
-      - uses: your-org/who-reviews@main
+      - uses: andret13pinto/who-reviews@v0.1
 ```
 
 ## Configuration
