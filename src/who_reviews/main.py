@@ -43,8 +43,11 @@ def run() -> None:
 
     changed_files = client.get_changed_files(repo, pr_number)
     author = client.get_pr_author(repo, pr_number)
+    collaborators = client.get_collaborators(repo)
 
-    reviewers = selector.select_reviewers(changed_files, author, repo, pr_number)
+    reviewers = selector.select_reviewers(
+        changed_files, author, repo, pr_number, collaborators
+    )
 
     if reviewers:
         client.assign_reviewers(repo, pr_number, reviewers)

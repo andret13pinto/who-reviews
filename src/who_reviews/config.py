@@ -18,6 +18,7 @@ class ReviewConfig(BaseModel):
     squads: list[SquadConfig]
     squad_reviewers: int = Field(default=1, ge=0)
     outsider_reviewers: int = Field(default=1, ge=0)
+    exclude: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_squads(self) -> ReviewConfig:

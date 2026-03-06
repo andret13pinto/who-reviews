@@ -19,6 +19,12 @@ A GitHub Action that automatically assigns PR reviewers based on code ownership.
 
 By default, `squad_reviewers=1` and `outsider_reviewers=1`, matching the original behavior. Both can be set to `0` (e.g., only squad reviewers, or only outsiders). When there aren't enough candidates, as many as available are picked.
 
+### Collaborators as outsiders
+
+The outsider pool isn't limited to squad members — the action fetches all repository collaborators from GitHub and includes them as candidates. This means people who have repo access but aren't in any squad (new hires, cross-team contributors, etc.) can still be picked as outsider reviewers.
+
+You can filter out specific users (bots, service accounts) with the `exclude` config option.
+
 ### Deficit compensation
 
 When a squad doesn't have enough candidates (e.g., the PR author is the only member), the shortfall is compensated by picking extra outsiders. This ensures the total reviewer count stays consistent regardless of who opens the PR.
@@ -36,18 +42,19 @@ strategy: random  # random | round-robin | least-recent
 squad_reviewers: 1   # reviewers picked per affected squad (default: 1)
 outsider_reviewers: 1 # reviewers picked from outside affected squads (default: 1)
 
+exclude:           # users to never assign as reviewers (default: [])
+  - dependabot[bot]
+  - renovate[bot]
+
 squads:
   - name: payments
-    members:
-      - alice
-      - bob
-      - charlie
+    members: [alice, bob, charlie]   # inline list syntax
     paths:
       - src/payments/**
       - src/billing/**
 
   - name: platform
-    members:
+    members:                          # multi-line syntax
       - dave
       - eve
       - frank
@@ -55,6 +62,8 @@ squads:
       - src/infra/**
       - src/auth/**
 ```
+
+Both list styles (`[a, b]` and multi-line `- a`) are valid YAML and work interchangeably for `members`, `paths`, and `exclude`.
 
 ### 2. Add the workflow
 
@@ -97,6 +106,13 @@ The config is validated on load. It will reject:
 - Empty squads (no members or no paths)
 - Negative reviewer counts
 - Invalid strategy names
+
+| Config key | Type | Default | Description |
+|------------|------|---------|-------------|
+| `strategy` | string | `random` | Selection strategy (`random`, `round-robin`, `least-recent`) |
+| `squad_reviewers` | int | `1` | Reviewers picked per affected squad |
+| `outsider_reviewers` | int | `1` | Reviewers picked from outside affected squads |
+| `exclude` | list | `[]` | Users to never assign (bots, service accounts, etc.) |
 
 ## Development
 

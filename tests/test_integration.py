@@ -70,6 +70,20 @@ def _mock_files_endpoint(mock: respx.MockRouter, filenames: list[str]) -> respx.
     )
 
 
+def _mock_collaborators_endpoint(
+    mock: respx.MockRouter, logins: list[str] | None = None
+) -> respx.Route:
+    if logins is None:
+        logins = ["alice", "bob", "charlie", "dave", "eve", "frank", "grace", "heidi"]
+    page1 = [{"login": login} for login in logins]
+    return mock.get(f"/repos/{REPO}/collaborators").mock(
+        side_effect=[
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+
 def _mock_assign_endpoint(mock: respx.MockRouter) -> respx.Route:
     return mock.post(f"/repos/{REPO}/pulls/{PR_NUMBER}/requested_reviewers").mock(
         return_value=httpx.Response(201, json={})
@@ -81,9 +95,11 @@ def _run_full_flow(
     config_path: Path,
     changed_files: list[str],
     author: str = AUTHOR,
+    collaborator_logins: list[str] | None = None,
 ) -> list[str]:
     _mock_pr_endpoint(mock, author)
     _mock_files_endpoint(mock, changed_files)
+    _mock_collaborators_endpoint(mock, collaborator_logins)
     _mock_assign_endpoint(mock)
 
     config = load_config(config_path)
@@ -93,7 +109,10 @@ def _run_full_flow(
 
     files = client.get_changed_files(REPO, PR_NUMBER)
     pr_author = client.get_pr_author(REPO, PR_NUMBER)
-    reviewers = selector.select_reviewers(files, pr_author, REPO, PR_NUMBER)
+    collaborators = client.get_collaborators(REPO)
+    reviewers = selector.select_reviewers(
+        files, pr_author, REPO, PR_NUMBER, collaborators
+    )
 
     if reviewers:
         client.assign_reviewers(REPO, PR_NUMBER, reviewers)
@@ -171,6 +190,7 @@ class TestGitHubApiInteraction:
     ) -> None:
         _mock_pr_endpoint(respx_mock)
         _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_collaborators_endpoint(respx_mock)
         assign_route = _mock_assign_endpoint(respx_mock)
 
         config = load_config(config_file)
@@ -179,7 +199,10 @@ class TestGitHubApiInteraction:
 
         files = client.get_changed_files(REPO, PR_NUMBER)
         author = client.get_pr_author(REPO, PR_NUMBER)
-        reviewers = selector.select_reviewers(files, author, REPO, PR_NUMBER)
+        collaborators = client.get_collaborators(REPO)
+        reviewers = selector.select_reviewers(
+            files, author, REPO, PR_NUMBER, collaborators
+        )
         client.assign_reviewers(REPO, PR_NUMBER, reviewers)
 
         assert assign_route.called
@@ -242,6 +265,7 @@ class TestMainEntryPoint:
 
         _mock_pr_endpoint(respx_mock)
         _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_collaborators_endpoint(respx_mock)
         assign_route = _mock_assign_endpoint(respx_mock)
 
         from who_reviews.main import run

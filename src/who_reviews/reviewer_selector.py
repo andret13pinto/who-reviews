@@ -16,16 +16,29 @@ class ReviewerSelector:
         author: str,
         repo: str,
         pr_number: int,
+        collaborators: list[str] | None = None,
     ) -> list[str]:
         affected_squads = resolve_ownership(changed_files, self._config)
+        pool = self._build_pool(collaborators)
 
         if not affected_squads:
-            return self._select_no_ownership(author, repo, pr_number)
+            return self._select_no_ownership(author, repo, pr_number, pool)
 
-        return self._select_with_ownership(affected_squads, author, repo, pr_number)
+        return self._select_with_ownership(
+            affected_squads, author, repo, pr_number, pool
+        )
 
-    def _select_no_ownership(self, author: str, repo: str, pr_number: int) -> list[str]:
-        candidates = sorted(self._config.all_members - {author})
+    def _build_pool(self, collaborators: list[str] | None) -> set[str]:
+        pool = self._config.all_members.copy()
+        if collaborators:
+            pool.update(collaborators)
+        pool -= set(self._config.exclude)
+        return pool
+
+    def _select_no_ownership(
+        self, author: str, repo: str, pr_number: int, pool: set[str]
+    ) -> list[str]:
+        candidates = sorted(pool - {author})
         total = self._config.squad_reviewers + self._config.outsider_reviewers
         if not candidates or total == 0:
             return []
@@ -47,6 +60,7 @@ class ReviewerSelector:
         author: str,
         repo: str,
         pr_number: int,
+        pool: set[str],
     ) -> list[str]:
         reviewers: list[str] = []
         expected_squad_picks = 0
@@ -65,7 +79,7 @@ class ReviewerSelector:
 
         squad_deficit = expected_squad_picks - len(reviewers)
         outsiders = self._pick_outsiders(
-            affected_squads, author, reviewers, repo, pr_number, squad_deficit
+            affected_squads, author, reviewers, repo, pr_number, pool, squad_deficit
         )
         reviewers.extend(outsiders)
 
@@ -78,6 +92,7 @@ class ReviewerSelector:
         already_selected: list[str],
         repo: str,
         pr_number: int,
+        pool: set[str],
         squad_deficit: int = 0,
     ) -> list[str]:
         affected_members: set[str] = set()
@@ -85,10 +100,7 @@ class ReviewerSelector:
             affected_members.update(squad.members)
 
         outsider_candidates = sorted(
-            self._config.all_members
-            - affected_members
-            - {author}
-            - set(already_selected)
+            pool - affected_members - {author} - set(already_selected)
         )
         if not outsider_candidates:
             return []

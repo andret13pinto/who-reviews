@@ -50,6 +50,22 @@ class GitHubClient:
         login: str = response.json()["user"]["login"]
         return login
 
+    def get_collaborators(self, repo: str) -> list[str]:
+        collaborators: list[str] = []
+        page = 1
+        while True:
+            response = self._client.get(
+                f"/repos/{repo}/collaborators",
+                params={"per_page": 100, "page": page},
+            )
+            response.raise_for_status()
+            batch = response.json()
+            if not batch:
+                break
+            collaborators.extend(item["login"] for item in batch)
+            page += 1
+        return collaborators
+
     def assign_reviewers(self, repo: str, pr_number: int, reviewers: list[str]) -> None:
         response = self._client.post(
             f"/repos/{repo}/pulls/{pr_number}/requested_reviewers",

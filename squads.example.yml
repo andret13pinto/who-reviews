@@ -1,5 +1,9 @@
 strategy: random  # random | round-robin | least-recent
 
+exclude:
+  - dependabot[bot]
+  - renovate[bot]
+
 squads:
   - name: payments
     members:

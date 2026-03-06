@@ -417,6 +417,142 @@ class TestConfigurableReviewerCounts:
         assert "dave" not in result
 
 
+class TestCollaboratorsAsOutsiders:
+    """Non-squad collaborators are eligible for the outsider pool."""
+
+    def test_collaborator_picked_as_outsider(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+            ],
+            outsider_reviewers=1,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+            collaborators=["charlie", "dave"],
+        )
+
+        # bob from squad, then charlie or dave as outsider
+        assert len(result) == 2
+        assert result[0] == "bob"
+        assert result[1] in {"charlie", "dave"}
+
+    def test_collaborator_in_no_ownership_fallback(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+            ],
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["README.md"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+            collaborators=["bob", "charlie"],
+        )
+
+        assert "alice" not in result
+        assert len(result) == 2
+        assert set(result).issubset({"bob", "charlie"})
+
+    def test_excluded_collaborator_not_picked(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+            ],
+            outsider_reviewers=1,
+            exclude=["badbot"],
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+            collaborators=["badbot", "charlie"],
+        )
+
+        assert "badbot" not in result
+        assert result[1] == "charlie"
+
+    def test_excluded_squad_member_not_picked(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob", "charlie"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["dave"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            exclude=["bob"],
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["README.md"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        assert "bob" not in result
+
+    def test_no_collaborators_falls_back_to_squad_members(
+        self,
+        review_config: ReviewConfig,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        selector = ReviewerSelector(review_config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        # Behaves same as before — outsider comes from other squads
+        assert len(result) == 2
+        assert all(r in review_config.all_members for r in result)
+
+
 class TestEdgeCases:
     def test_author_is_sole_squad_member_compensates_with_outsiders(
         self,
