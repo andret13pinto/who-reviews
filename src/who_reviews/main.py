@@ -43,10 +43,14 @@ def run() -> None:
 
     changed_files = client.get_changed_files(repo, pr_number)
     author = client.get_pr_author(repo, pr_number)
-    collaborators = client.get_collaborators(repo)
+    outsiders: list[str] | None = None
+    if config.outsider_source == "contributors":
+        outsiders = client.get_contributors(repo)
+    elif config.outsider_source == "collaborators":
+        outsiders = client.get_collaborators(repo)
 
     reviewers = selector.select_reviewers(
-        changed_files, author, repo, pr_number, collaborators
+        changed_files, author, repo, pr_number, outsiders
     )
 
     if reviewers:

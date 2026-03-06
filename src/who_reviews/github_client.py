@@ -50,21 +50,27 @@ class GitHubClient:
         login: str = response.json()["user"]["login"]
         return login
 
+    def get_contributors(self, repo: str) -> list[str]:
+        return self._paginate_logins(f"/repos/{repo}/contributors")
+
     def get_collaborators(self, repo: str) -> list[str]:
-        collaborators: list[str] = []
+        return self._paginate_logins(f"/repos/{repo}/collaborators")
+
+    def _paginate_logins(self, url: str) -> list[str]:
+        logins: list[str] = []
         page = 1
         while True:
             response = self._client.get(
-                f"/repos/{repo}/collaborators",
+                url,
                 params={"per_page": 100, "page": page},
             )
             response.raise_for_status()
             batch = response.json()
             if not batch:
                 break
-            collaborators.extend(item["login"] for item in batch)
+            logins.extend(item["login"] for item in batch)
             page += 1
-        return collaborators
+        return logins
 
     def assign_reviewers(self, repo: str, pr_number: int, reviewers: list[str]) -> None:
         response = self._client.post(

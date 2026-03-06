@@ -1,4 +1,5 @@
 strategy: random  # random | round-robin | least-recent
+# outsider_source: contributors  # contributors | collaborators
 
 exclude:
   - dependabot[bot]

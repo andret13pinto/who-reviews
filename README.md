@@ -19,9 +19,12 @@ A GitHub Action that automatically assigns PR reviewers based on code ownership.
 
 By default, `squad_reviewers=1` and `outsider_reviewers=1`, matching the original behavior. Both can be set to `0` (e.g., only squad reviewers, or only outsiders). When there aren't enough candidates, as many as available are picked.
 
-### Collaborators as outsiders
+### Outsider pool from GitHub
 
-The outsider pool isn't limited to squad members — the action fetches all repository collaborators from GitHub and includes them as candidates. This means people who have repo access but aren't in any squad (new hires, cross-team contributors, etc.) can still be picked as outsider reviewers.
+By default, outsiders are picked only from squad members. You can expand the pool by setting `outsider_source`:
+
+- **`contributors`** — people who have committed to the repo
+- **`collaborators`** — people with access to the repo (can include the entire org)
 
 You can filter out specific users (bots, service accounts) with the `exclude` config option.
 
@@ -41,6 +44,7 @@ By default, the action looks for the config file at `.github/squads.yml` — no 
 strategy: random  # random | round-robin | least-recent
 squad_reviewers: 1   # reviewers picked per affected squad (default: 1)
 outsider_reviewers: 1 # reviewers picked from outside affected squads (default: 1)
+# outsider_source: contributors  # contributors | collaborators
 
 exclude:           # users to never assign as reviewers (default: [])
   - dependabot[bot]
@@ -113,6 +117,7 @@ The config is validated on load. It will reject:
 | `squad_reviewers` | int | `1` | Reviewers picked per affected squad |
 | `outsider_reviewers` | int | `1` | Reviewers picked from outside affected squads |
 | `exclude` | list | `[]` | Users to never assign (bots, service accounts, etc.) |
+| `outsider_source` | string | not set | Where to fetch outsider candidates (`contributors` or `collaborators`) |
 
 ## Development
 
