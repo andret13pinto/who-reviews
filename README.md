@@ -52,6 +52,10 @@ exclude:           # users to never assign as reviewers (default: [])
   - dependabot[bot]
   - renovate[bot]
 
+slack_handles:     # optional map of GitHub usernames to Slack user IDs/handles
+  grace: "U12345"
+  heidi: "heidi.smith"
+
 squads:
   - name: payments
     team: payments-team              # members from GitHub team
@@ -93,6 +97,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: andret13pinto/who-reviews@v0.1
+        with:
+          slack-webhook: ${{ secrets.SLACK_WEBHOOK_URL }} # Optional: Send Slack notifications
 ```
 
 ## Configuration
@@ -102,6 +108,7 @@ jobs:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `config-path` | Path to squads config file | `.github/squads.yml` |
+| `slack-webhook` | Slack webhook URL for sending review notifications | |
 
 ### Selection Strategies
 
@@ -126,6 +133,7 @@ The config is validated on load. It will reject:
 | `exclude` | list | `[]` | Users to never assign (bots, service accounts, etc.) |
 | `outsider_source` | string | not set | Where to fetch outsider candidates (`contributors`, `collaborators`, or `team`) |
 | `outsider_team` | string | not set | GitHub team slug for outsider pool (required when `outsider_source: team`) |
+| `slack_handles` | dict | `{}` | Optional mapping of GitHub usernames to Slack IDs to tag users correctly in Slack messages |
 
 ## Development
 

@@ -6,6 +6,12 @@ exclude:
   - dependabot[bot]
   - renovate[bot]
 
+# Optional: Map GitHub usernames to Slack IDs to ping users in Slack notifications.
+# You can use standard slack IDs (like U123456) or just their @handle.
+# slack_handles:
+#   grace: "U12345"
+#   heidi: "heidi.smith"
+
 squads:
   - name: payments
     team: payments-team              # members from GitHub team

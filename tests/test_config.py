@@ -176,3 +176,18 @@ class TestLoadConfig:
         assert config.strategy == "round-robin"
         assert len(config.squads) == 1
         assert config.squads[0].name == "team"
+
+    def test_loads_slack_handles(self, tmp_path: Path) -> None:
+        config_data = {
+            "strategy": "random",
+            "slack_handles": {"alice": "U12345", "bob": "bob_slack"},
+            "squads": [
+                {"name": "team", "members": ["alice", "bob"], "paths": ["src/**"]},
+            ],
+        }
+        config_file = tmp_path / "squads.yml"
+        config_file.write_text(yaml.dump(config_data))
+
+        config = load_config(config_file)
+
+        assert config.slack_handles == {"alice": "U12345", "bob": "bob_slack"}

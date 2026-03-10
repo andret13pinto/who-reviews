@@ -30,6 +30,7 @@ class ReviewConfig(BaseModel):
     exclude: list[str] = Field(default_factory=list)
     outsider_source: Literal["contributors", "collaborators", "team"] | None = None
     outsider_team: str | None = None
+    slack_handles: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_config(self) -> ReviewConfig:

@@ -5,6 +5,9 @@ inputs:
     description: "Path to squads config file"
     required: false
     default: ".github/squads.yml"
+  slack-webhook:
+    description: "Slack webhook URL for sending review notifications"
+    required: false
 runs:
   using: composite
   steps:
@@ -22,6 +25,7 @@ runs:
       env:
         INPUT_GITHUB-TOKEN: ${{ github.token }}
         INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+        INPUT_SLACK-WEBHOOK: ${{ inputs.slack-webhook }}
 branding:
   icon: "users"
   color: "blue"
