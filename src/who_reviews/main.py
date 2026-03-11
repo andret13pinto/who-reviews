@@ -8,6 +8,7 @@ from pathlib import Path
 from who_reviews.config import ReviewConfig, load_config
 from who_reviews.github_client import GitHubClient
 from who_reviews.reviewer_selector import ReviewerSelector
+from who_reviews.slack_client import SlackClient
 from who_reviews.strategies import (
     LeastRecentStrategy,
     RandomStrategy,
@@ -50,13 +51,18 @@ def run() -> None:
     repo = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["INPUT_GITHUB-TOKEN"]
     config_path = Path(os.environ.get("INPUT_CONFIG-PATH", ".github/squads.yml"))
+    slack_webhook = os.environ.get("INPUT_SLACK-WEBHOOK", "").strip()
 
     org = repo.split("/")[0]
 
     with open(event_path) as f:
         event = json.load(f)
 
-    pr_number: int = event["pull_request"]["number"]
+    pr = event["pull_request"]
+    pr_number: int = pr["number"]
+    pr_title: str = pr["title"]
+    pr_url: str = pr["html_url"]
+    pr_author_login: str = pr["user"]["login"]
 
     config = load_config(config_path)
     strategy = _build_strategy(config.strategy)
@@ -77,6 +83,43 @@ def run() -> None:
     if reviewers:
         client.assign_reviewers(repo, pr_number, reviewers)
         print(f"Assigned reviewers: {', '.join(reviewers)}")
+
+        if slack_webhook:
+            mentions = []
+            for reviewer in reviewers:
+                handle = config.slack_handles.get(reviewer)
+                if handle:
+                    # Typical Slack user IDs start with U or W.
+                    # Wrap in <@...> for mentions. Otherwise use @name.
+                    if handle.startswith("U") or handle.startswith("W"):
+                        mentions.append(f"<@{handle}>")
+                    else:
+                        mentions.append(f"@{handle}")
+                else:
+                    mentions.append(f"@{reviewer}")
+            mentions_str = ", ".join(mentions)
+
+            author_handle = config.slack_handles.get(pr_author_login)
+            if author_handle:
+                if author_handle.startswith("U") or author_handle.startswith("W"):
+                    author_handle = f"<@{author_handle}>"
+                else:
+                    author_handle = f"@{author_handle}"
+            else:
+                author_handle = f"@{pr_author_login}"
+
+            message = (
+                f"🚀 *New PR needs review in {repo}*\n"
+                f"<{pr_url}|{pr_title}>\n"
+                f"Author: {author_handle}\n"
+                f"Assigned to: {mentions_str}"
+            )
+            slack_client = SlackClient(webhook_url=slack_webhook)
+            try:
+                slack_client.send_message(message)
+                print("Slack notification sent successfully.")
+            except Exception as e:
+                print(f"Failed to send Slack notification: {e}")
     else:
         print("No eligible reviewers found")
 

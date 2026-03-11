@@ -48,7 +48,14 @@ def config_file(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def event_file(tmp_path: Path) -> Path:
-    event = {"pull_request": {"number": PR_NUMBER}}
+    event = {
+        "pull_request": {
+            "number": PR_NUMBER,
+            "title": "Fix bug",
+            "html_url": f"https://github.com/{REPO}/pull/{PR_NUMBER}",
+            "user": {"login": AUTHOR},
+        }
+    }
     path = tmp_path / "event.json"
     path.write_text(json.dumps(event))
     return path
