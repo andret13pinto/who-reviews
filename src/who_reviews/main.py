@@ -109,7 +109,6 @@ def run() -> None:
                 author_handle = f"@{pr_author_login}"
 
             message = (
-                f"🚀 *New PR needs review in {repo}*\n"
                 f"<{pr_url}|{pr_title}>\n"
                 f"Author: {author_handle}\n"
                 f"Assigned to: {mentions_str}"
