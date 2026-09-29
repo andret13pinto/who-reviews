@@ -98,10 +98,21 @@ jobs:
     if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@v4
-      - uses: andret13pinto/who-reviews@v0.1
+      - uses: andret13pinto/who-reviews@v0.8.1
         with:
           slack-webhook: ${{ secrets.SLACK_WEBHOOK_URL }} # Optional: Send Slack notifications
 ```
+
+### Running without the action
+
+The package is also on PyPI, for CI systems or workflows that don't use the composite action:
+
+```bash
+pip install who-reviews
+who-reviews
+```
+
+It reads the same environment variables the action sets: `GITHUB_EVENT_PATH`, `GITHUB_REPOSITORY`, `INPUT_GITHUB-TOKEN`, and optionally `INPUT_CONFIG-PATH` and `INPUT_SLACK-WEBHOOK`.
 
 ## Configuration
 
