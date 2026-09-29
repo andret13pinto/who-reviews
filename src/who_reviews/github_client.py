@@ -5,6 +5,17 @@ import httpx
 from who_reviews.http_retry import RetryTransport
 
 
+class GitHubAPIError(Exception):
+    def __init__(self, response: httpx.Response) -> None:
+        self.status_code = response.status_code
+        self.detail = _extract_error_detail(response)
+        request = response.request
+        super().__init__(
+            f"GitHub API {request.method} {request.url.path} failed "
+            f"with {self.status_code}: {self.detail}"
+        )
+
+
 class GitHubClient:
     def __init__(
         self,
@@ -36,7 +47,7 @@ class GitHubClient:
                 f"/repos/{repo}/pulls/{pr_number}/files",
                 params={"per_page": 100, "page": page},
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             batch = response.json()
             if not batch:
                 break
@@ -46,7 +57,7 @@ class GitHubClient:
 
     def get_pr_author(self, repo: str, pr_number: int) -> str:
         response = self._client.get(f"/repos/{repo}/pulls/{pr_number}")
-        response.raise_for_status()
+        _raise_for_status(response)
         login: str = response.json()["user"]["login"]
         return login
 
@@ -67,7 +78,7 @@ class GitHubClient:
                 url,
                 params={"per_page": 100, "page": page},
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             batch = response.json()
             if not batch:
                 break
@@ -80,4 +91,21 @@ class GitHubClient:
             f"/repos/{repo}/pulls/{pr_number}/requested_reviewers",
             json={"reviewers": reviewers},
         )
-        response.raise_for_status()
+        _raise_for_status(response)
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    if response.is_error:
+        raise GitHubAPIError(response)
+
+
+def _extract_error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text or response.reason_phrase
+    if not isinstance(body, dict):
+        return str(body)
+    parts = [str(body.get("message", response.reason_phrase))]
+    parts.extend(str(error) for error in body.get("errors", []))
+    return "; ".join(parts)

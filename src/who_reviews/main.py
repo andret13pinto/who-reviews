@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from who_reviews.config import ReviewConfig, load_config
-from who_reviews.github_client import GitHubClient
+from who_reviews.github_client import GitHubAPIError, GitHubClient
 from who_reviews.reviewer_selector import ReviewerSelector
 from who_reviews.slack_client import SlackClient
 from who_reviews.strategies import (
@@ -46,6 +46,29 @@ def _resolve_outsiders(
     return None
 
 
+def _fetch_collaborators(client: GitHubClient, repo: str) -> set[str] | None:
+    try:
+        return set(client.get_collaborators(repo))
+    except GitHubAPIError as exc:
+        print(
+            f"::warning::Could not list collaborators, skipping collaborator "
+            f"check: {exc}"
+        )
+        return None
+
+
+def _restrict_to_collaborators(
+    config: ReviewConfig, outsiders: list[str] | None, collaborators: set[str]
+) -> tuple[list[str] | None, list[str]]:
+    candidates = config.all_members | set(outsiders or [])
+    skipped = sorted(candidates - collaborators)
+    for squad in config.squads:
+        squad.members = [m for m in squad.members if m in collaborators]
+    if outsiders is not None:
+        outsiders = [o for o in outsiders if o in collaborators]
+    return outsiders, skipped
+
+
 def run() -> None:
     event_path = os.environ["GITHUB_EVENT_PATH"]
     repo = os.environ["GITHUB_REPOSITORY"]
@@ -76,11 +99,23 @@ def run() -> None:
     author = client.get_pr_author(repo, pr_number)
     outsiders = _resolve_outsiders(config, client, repo, org)
 
+    if config.outsider_source == "collaborators" and outsiders is not None:
+        collaborators: set[str] | None = set(outsiders)
+    else:
+        collaborators = _fetch_collaborators(client, repo)
+    if collaborators is not None:
+        outsiders, skipped = _restrict_to_collaborators(
+            config, outsiders, collaborators
+        )
+        if skipped:
+            print(f"Skipping non-collaborators: {', '.join(skipped)}")
+
     reviewers = selector.select_reviewers(
         changed_files, author, repo, pr_number, outsiders
     )
 
     if reviewers:
+        print(f"Requesting reviews from: {', '.join(reviewers)}")
         client.assign_reviewers(repo, pr_number, reviewers)
         print(f"Assigned reviewers: {', '.join(reviewers)}")
 

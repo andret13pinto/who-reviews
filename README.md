@@ -35,6 +35,8 @@ When a squad doesn't have enough candidates (e.g., the PR author is the only mem
 
 The PR author is always excluded from candidates.
 
+GitHub only accepts review requests for repo collaborators, so candidates who aren't collaborators are skipped and listed in the log. If the token can't list collaborators, the action logs a warning and skips this check.
+
 ## Setup
 
 ### 1. Create `.github/squads.yml`
