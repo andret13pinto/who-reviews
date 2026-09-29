@@ -9,7 +9,7 @@ import respx
 import yaml
 
 from who_reviews.config import load_config
-from who_reviews.github_client import GitHubClient
+from who_reviews.github_client import GitHubAPIError, GitHubClient
 from who_reviews.reviewer_selector import ReviewerSelector
 from who_reviews.strategies import RandomStrategy
 
@@ -84,6 +84,20 @@ def _mock_contributors_endpoint(
         logins = ["alice", "bob", "charlie", "dave", "eve", "frank", "grace", "heidi"]
     page1 = [{"login": login} for login in logins]
     return mock.get(f"/repos/{REPO}/contributors").mock(
+        side_effect=[
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+
+def _mock_collaborators_endpoint(
+    mock: respx.MockRouter, logins: list[str] | None = None
+) -> respx.Route:
+    if logins is None:
+        logins = ["alice", "bob", "charlie", "dave", "eve", "frank", "grace", "heidi"]
+    page1 = [{"login": login} for login in logins]
+    return mock.get(f"/repos/{REPO}/collaborators").mock(
         side_effect=[
             httpx.Response(200, json=page1),
             httpx.Response(200, json=[]),
@@ -436,22 +450,88 @@ class TestRetryIntegration:
         assert files == ["src/payments/stripe.py"]
 
 
-class TestMainEntryPoint:
+class TestGitHubApiErrors:
+    @pytest.mark.parametrize(
+        ("status", "message", "errors"),
+        [
+            (
+                422,
+                "Reviews may only be requested from collaborators.",
+                ["mallory is not a collaborator"],
+            ),
+            (403, "Resource not accessible by integration", []),
+        ],
+    )
     @respx.mock(base_url=BASE_URL)
-    def test_end_to_end_via_env_vars(
+    def test_error_carries_github_details(
         self,
-        config_file: Path,
-        event_file: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        status: int,
+        message: str,
+        errors: list[str],
         respx_mock: respx.MockRouter,
     ) -> None:
-        monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_file))
-        monkeypatch.setenv("GITHUB_REPOSITORY", REPO)
-        monkeypatch.setenv("INPUT_GITHUB-TOKEN", "fake-token")
-        monkeypatch.setenv("INPUT_CONFIG-PATH", str(config_file))
+        respx_mock.post(f"/repos/{REPO}/pulls/{PR_NUMBER}/requested_reviewers").mock(
+            return_value=httpx.Response(
+                status, json={"message": message, "errors": errors}
+            )
+        )
+        client = GitHubClient(token="fake-token")
 
+        with pytest.raises(GitHubAPIError) as exc_info:
+            client.assign_reviewers(REPO, PR_NUMBER, ["mallory"])
+
+        assert exc_info.value.status_code == status
+        for detail in [message, *errors]:
+            assert detail in str(exc_info.value)
+
+
+class TestRestrictToCollaborators:
+    def test_drops_non_collaborators_from_squads_and_outsiders(
+        self, config_file: Path
+    ) -> None:
+        from who_reviews.main import _restrict_to_collaborators
+
+        config = load_config(config_file)
+        collaborators = config.all_members - {"bob", "eve"}
+
+        outsiders, skipped = _restrict_to_collaborators(
+            config, ["zara", "yuki", "dave"], collaborators | {"zara"}
+        )
+
+        assert set(skipped) == {"bob", "eve", "yuki"}
+        assert outsiders == ["zara", "dave"]
+        assert config.all_members == collaborators
+
+    def test_keeps_absent_outsiders_absent(self, config_file: Path) -> None:
+        from who_reviews.main import _restrict_to_collaborators
+
+        config = load_config(config_file)
+
+        outsiders, skipped = _restrict_to_collaborators(
+            config, None, config.all_members
+        )
+
+        assert outsiders is None
+        assert skipped == []
+
+
+@pytest.fixture()
+def action_env(
+    config_file: Path, event_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_file))
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPO)
+    monkeypatch.setenv("INPUT_GITHUB-TOKEN", "fake-token")
+    monkeypatch.setenv("INPUT_CONFIG-PATH", str(config_file))
+
+
+@pytest.mark.usefixtures("action_env")
+class TestMainEntryPoint:
+    @respx.mock(base_url=BASE_URL)
+    def test_end_to_end_via_env_vars(self, respx_mock: respx.MockRouter) -> None:
         _mock_pr_endpoint(respx_mock)
         _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_collaborators_endpoint(respx_mock)
         assign_route = _mock_assign_endpoint(respx_mock)
 
         from who_reviews.main import run
@@ -462,3 +542,39 @@ class TestMainEntryPoint:
         body = json.loads(assign_route.calls.last.request.content)
         assert len(body["reviewers"]) == 2
         assert AUTHOR not in body["reviewers"]
+
+    @respx.mock(base_url=BASE_URL)
+    def test_never_assigns_non_collaborators(
+        self, respx_mock: respx.MockRouter
+    ) -> None:
+        non_collaborators = {"charlie", "dave", "eve", "frank", "grace"}
+        _mock_pr_endpoint(respx_mock)
+        _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_collaborators_endpoint(respx_mock, ["alice", "bob", "heidi"])
+        assign_route = _mock_assign_endpoint(respx_mock)
+
+        from who_reviews.main import run
+
+        run()
+
+        body = json.loads(assign_route.calls.last.request.content)
+        assert set(body["reviewers"]) == {"bob", "heidi"}
+        assert not non_collaborators & set(body["reviewers"])
+
+    @respx.mock(base_url=BASE_URL)
+    def test_assigns_without_filter_when_collaborators_unavailable(
+        self, respx_mock: respx.MockRouter
+    ) -> None:
+        _mock_pr_endpoint(respx_mock)
+        _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        respx_mock.get(f"/repos/{REPO}/collaborators").mock(
+            return_value=httpx.Response(403, json={"message": "Forbidden"})
+        )
+        assign_route = _mock_assign_endpoint(respx_mock)
+
+        from who_reviews.main import run
+
+        run()
+
+        body = json.loads(assign_route.calls.last.request.content)
+        assert len(body["reviewers"]) == 2
